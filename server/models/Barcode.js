@@ -14,6 +14,7 @@ const barcodeSchema = new mongoose.Schema({
   fault: { type: String },
   accepted: { type: String },
   deliveredBy: { type: String },
+  asset: { type: String, required: true },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Barcode', barcodeSchema);

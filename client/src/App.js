@@ -7,6 +7,19 @@ export default function App() {
     // State for editing scanned barcode
     const [editingBarcode, setEditingBarcode] = useState(null);
     const [editMode, setEditMode] = useState(false);
+    // State for asset counts
+    const [assetCounts, setAssetCounts] = useState({});
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const { api } = await import('./services/api');
+          const res = await api.get('/barcodes/asset-counts');
+          setAssetCounts(res);
+        } catch (err) {
+          setAssetCounts({ error: 'Error fetching asset counts' });
+        }
+      })();
+    }, []);
   const [barcodeForm, setBarcodeForm] = useState({
     productName: '',
     serialNumber: '',
@@ -82,6 +95,67 @@ export default function App() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
             <img src="https://tse1.mm.bing.net/th/id/OIP.6ISiR68fTJizRexWth0ABQAAAA?cb=ucfimg2ucfimg=1&rs=1&pid=ImgDetMain&o=7&rm=3" alt="Logo" style={{ height: '80px', objectFit: 'contain', boxShadow: '0 2px 8px #e0e7ff', background: 'white', borderRadius: '20px', padding: '4px', marginBottom: '12px' }} />
             <span style={{ fontSize: '32px', fontWeight: '900', color: '#6366f1', letterSpacing: '2px', textAlign: 'center' }}>IT Department Asset Management System</span>
+            {/* Asset counts display and Generate Report button */}
+            <div style={{ marginTop: '18px', fontSize: '18px', fontWeight: '700', color: '#059669', background: '#f3f4f6', borderRadius: '12px', padding: '12px 24px', boxShadow: '0 2px 8px #05966922', display: 'inline-block', textAlign: 'left' }}>
+              {assetCounts && typeof assetCounts === 'object' && !assetCounts.error ? (
+                Object.entries(assetCounts).map(([asset, count]) => (
+                  <div key={asset} style={{ marginBottom: '8px' }}>{asset}: <span style={{ color: '#2563eb' }}>{count}</span></div>
+                ))
+              ) : (
+                <span style={{ color: 'red' }}>{assetCounts.error || 'No asset counts available'}</span>
+              )}
+              <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <select id="assetReportSelect" style={{ padding: '10px', fontSize: '16px', borderRadius: '8px', border: '1px solid #ddd' }}>
+                  <option value="">Select Asset for Report</option>
+                  {assetCounts && typeof assetCounts === 'object' && !assetCounts.error &&
+                    Object.keys(assetCounts).map(asset => (
+                      <option key={asset} value={asset}>{asset}</option>
+                    ))}
+                </select>
+                <button
+                  style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', fontWeight: '700', fontSize: '16px', cursor: 'pointer', boxShadow: '0 2px 8px #2563eb33' }}
+                  onClick={async () => {
+                    const select = document.getElementById('assetReportSelect');
+                    const selectedAsset = select.value;
+                    if (!selectedAsset) {
+                      alert('Please select an asset to download its report.');
+                      return;
+                    }
+                    try {
+                      const { api } = await import('./services/api');
+                      const data = await api.get('/barcodes');
+                      if (!Array.isArray(data)) {
+                        alert('No barcode data found!');
+                        return;
+                      }
+                      // Filter by selected asset
+                      const filtered = data.filter(row => row.asset === selectedAsset);
+                      if (filtered.length === 0) {
+                        alert('No barcodes found for this asset.');
+                        return;
+                      }
+                      const fields = ['productName','serialNumber','barcodeValue','barcodeType','lastUpdate','remark','areaManager','supervisor','mobileNumber','location','fault','accepted','deliveredBy','asset'];
+                      const csvRows = [fields.join(',')];
+                      for (const row of filtered) {
+                        csvRows.push(fields.map(f => JSON.stringify(row[f] || '')).join(','));
+                      }
+                      const csvContent = csvRows.join('\n');
+                      const blob = new Blob([csvContent], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `barcode_report_${selectedAsset.replace(/\s+/g,'_')}.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      alert('Failed to generate report: ' + err.message);
+                    }
+                  }}
+                >Download Asset Report</button>
+              </div>
+            </div>
           </div>
         </nav>
         {/* Scan Barcode Input */}
@@ -217,15 +291,15 @@ export default function App() {
                   <input type="text" placeholder="Product Name" value={barcodeForm.productName} onChange={e => setBarcodeForm({ ...barcodeForm, productName: e.target.value })} style={{ flex: 1, padding: '14px', fontSize: '17px', borderRadius: '8px', border: '1px solid #ddd' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '20px', marginBottom: '12px' }}>
-                  <select value={barcodeForm.asset} onChange={e => setBarcodeForm({ ...barcodeForm, asset: e.target.value })} style={{ flex: 1, padding: '14px', fontSize: '17px', borderRadius: '8px', border: '1px solid #ddd', marginRight: '20px' }}>
+                  <select value={barcodeForm.asset} onChange={e => setBarcodeForm({ ...barcodeForm, asset: e.target.value })} style={{ flex: 1, padding: '14px', fontSize: '17px', borderRadius: '8px', border: '1px solid #ddd', marginRight: '20px' }} required>
                     <option value="">Select Asset</option>
                     <option value="Head Office">Head Office</option>
+                    <option value="Branch Office">Branch Office</option>
                     <option value="Printers">Printers</option>
                     <option value="Camera">Camera</option>
                     <option value="Fingerprint Machine">Fingerprint Machine</option>
                     <option value="TV">TV</option>
                     <option value="Knuck">Knuck</option>
-                    <option value="Branch Office">Branch Office</option>
                   </select>
                   <input type="text" placeholder="Serial Number" value={barcodeForm.serialNumber} onChange={handleSerialChange} style={{ flex: 1, padding: '14px', fontSize: '17px', borderRadius: '8px', border: '1px solid #ddd' }} />
                 </div>
